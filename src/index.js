@@ -608,20 +608,4 @@ setInterval(render,2000);
 </body>
 </html>`;
 
-    return new Response(html, {
-      headers: {
-        "Content-Type": "text/html; charset=UTF-8",
-        "Cache-Control": "no-store"
-      }
-    });
-  }
-};
-`;
-    return new Response(html, {
-      headers: {
-        "Content-Type": "text/html; charset=UTF-8",
-        "Cache-Control": "no-store"
-      }
-    });
-  }
-};
+    return new Response(html, 
