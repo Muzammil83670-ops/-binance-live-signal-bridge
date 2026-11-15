@@ -19,19 +19,13 @@ export default {
         return new Response(null, { status: 204, headers });
       }
 
-      const key = new Request(
-        url.origin + "/__v3_live_snapshot"
-      );
+      const key = new Request(url.origin + "/__v3_live_snapshot");
 
       if (request.method === "POST") {
         try {
           const data = await request.json();
 
-          if (
-            !data ||
-            data.symbol !== "BTCUSDT" ||
-            !data.timestamp
-          ) {
+          if (!data || data.symbol !== "BTCUSDT" || !data.timestamp) {
             return Response.json(
               { error: "Invalid V3 data" },
               { status: 400, headers }
@@ -238,6 +232,7 @@ button{
 // ======================================
 
 const el = id => document.getElementById(id);
+
 const put = (id, value) => {
   const node = el(id);
   if (node) node.textContent = value;
@@ -256,10 +251,7 @@ window.onerror = function(message, source, line, column) {
 };
 
 window.onunhandledrejection = function(event) {
-  put(
-    "health",
-    "PROMISE ERROR: " + String(event.reason)
-  );
+  put("health", "PROMISE ERROR: " + String(event.reason));
 };
 
 // ======================================
@@ -300,9 +292,7 @@ const number = (n, d = 2) =>
 const total = a => a.reduce((x,y) => x+y, 0);
 
 function addError(message) {
-  S.errors.push(
-    new Date().toLocaleTimeString() + " " + message
-  );
+  S.errors.push(new Date().toLocaleTimeString() + " " + message);
   S.errors = S.errors.slice(-8);
   console.error(message);
 }
@@ -1027,15 +1017,16 @@ function render() {
 
     signal(stats, buyRatio);
 
+    // FIXED: escaped newlines inside the outer HTML template.
     put(
       "health",
       "JavaScript: Running" +
-      "\nREST market: " + (S.lastMarket ? "Available" : "Waiting") +
-      "\nCandles loaded: " + Object.keys(S.candles).join(", ") +
-      "\nWebSocket: " + (S.ws ? "Connected" : "Reconnecting") +
-      "\nOI: " + (S.lastOI ? "Available" : "Waiting") +
-      "\nFunding: " + (S.lastFunding ? "Available" : "Waiting") +
-      "\nRecent errors: " + (S.errors.slice(-3).join(" | ") || "None")
+      "\\nREST market: " + (S.lastMarket ? "Available" : "Waiting") +
+      "\\nCandles loaded: " + Object.keys(S.candles).join(", ") +
+      "\\nWebSocket: " + (S.ws ? "Connected" : "Reconnecting") +
+      "\\nOI: " + (S.lastOI ? "Available" : "Waiting") +
+      "\\nFunding: " + (S.lastFunding ? "Available" : "Waiting") +
+      "\\nRecent errors: " + (S.errors.slice(-3).join(" | ") || "None")
     );
 
     publishLiveData(stats, buyRatio, buyValue, sellValue);
@@ -1082,14 +1073,11 @@ async function refreshAll() {
 put("health", "JavaScript running. Starting Binance connection...");
 put("apiStatus", "Live API: Waiting for dashboard data");
 
-// Render immediately so DATA HEALTH never stays at Starting.
 render();
 
-// Start WebSocket and REST data.
 connect();
 refreshAll();
 
-// Automatic updates.
 setInterval(() => {
   loadMarket().then(render).catch(e => {
     addError("Market update: " + String(e));
