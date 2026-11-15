@@ -1,71 +1,4 @@
-function setBook(data) {
-  // Binance REST uses bids/asks.
-  // Binance WebSocket uses b/a.
-  const rawBids = data?.bids || data?.b;
-  const rawAsks = data?.asks || data?.a;
 
-  if (
-    !Array.isArray(rawBids) ||
-    !Array.isArray(rawAsks) ||
-    rawBids.length === 0 ||
-    rawAsks.length === 0
-  ) {
-    throw Error("Invalid Binance order book format");
-  }
-
-  const bids = rawBids.map(x => [
-    Number(x[0]),
-    Number(x[1])
-  ]).filter(x =>
-    Number.isFinite(x[0]) &&
-    Number.isFinite(x[1]) &&
-    x[0] > 0 &&
-    x[1] >= 0
-  );
-
-  const asks = rawAsks.map(x => [
-    Number(x[0]),
-    Number(x[1])
-  ]).filter(x =>
-    Number.isFinite(x[0]) &&
-    Number.isFinite(x[1]) &&
-    x[0] > 0 &&
-    x[1] >= 0
-  );
-
-  if (!bids.length || !asks.length) {
-    throw Error("Order book contains invalid price levels");
-  }
-
-  const bidValue = total(
-    bids.map(x => x[0] * x[1])
-  );
-
-  const askValue = total(
-    asks.map(x => x[0] * x[1])
-  );
-
-  const bestBid = Math.max(...bids.map(x => x[0]));
-  const bestAsk = Math.min(...asks.map(x => x[0]));
-
-  if (bestAsk <= bestBid) {
-    throw Error("Invalid order book spread");
-  }
-
-  const mid = (bestBid + bestAsk) / 2;
-
-  S.book = {
-    bv: bidValue,
-    av: askValue,
-    imb: (bidValue + askValue)
-      ? (bidValue - askValue) / (bidValue + askValue)
-      : 0,
-    spread: mid
-      ? (bestAsk - bestBid) / mid * 100
-      : 0,
-    time: Date.now()
-  };
-}
 export default {
   async fetch(request) {
     const url = new URL(request.url);
@@ -92,7 +25,11 @@ export default {
         try {
           const data = await request.json();
 
-          if (!data || data.symbol !== "BTCUSDT" || !data.timestamp) {
+          if (
+            !data ||
+            data.symbol !== "BTCUSDT" ||
+            !data.timestamp
+          ) {
             return Response.json(
               { error: "Invalid V3 data" },
               { status: 400, headers }
@@ -531,6 +468,10 @@ async function loadCandles() {
         SYMBOL + "&interval=" + tf + "&limit=250"
       );
 
+      if (!Array.isArray(data)) {
+        throw Error("Invalid candle response for " + tf);
+      }
+
       S.candles[tf] = data;
     })
   );
@@ -548,61 +489,46 @@ async function loadCandles() {
 }
 
 // ======================================
-// LOAD MARKET DATA
-// ======================================
-
-async function loadMarket() {
-  const results = await Promise.allSettled([
-    get("/fapi/v1/ticker/24hr?symbol=" + SYMBOL),
-    get("/fapi/v1/depth?symbol=" + SYMBOL + "&limit=100"),
-    get("/fapi/v1/aggTrades?symbol=" + SYMBOL + "&limit=100")
-  ]);
-
-  if (results[0].status === "fulfilled") {
-    const d = results[0].value;
-    S.price = Number(d.lastPrice);
-    S.change = Number(d.priceChangePercent);
-  } else {
-    addError("Ticker: " + String(results[0].reason));
-  }
-
-  if (results[1].status === "fulfilled") {
-    setBook(results[1].value);
-  } else {
-    addError("Order book: " + String(results[1].reason));
-  }
-
-  if (results[2].status === "fulfilled") {
-    const now = Date.now();
-
-    S.trades = results[2].value.map(t => ({
-      time: Number(t.T),
-      value: Number(t.p) * Number(t.q),
-      buy: !t.m
-    })).filter(t => t.time > now - 60000);
-  } else {
-    addError("Trades: " + String(results[2].reason));
-  }
-
-  S.lastMarket = Date.now();
-}
-
-// ======================================
 // ORDER BOOK
+// Supports REST bids/asks and WebSocket b/a
 // ======================================
 
 function setBook(data) {
-  if (!data.bids || !data.asks) {
-    throw Error("Invalid order book response");
+  const rawBids = data?.bids || data?.b;
+  const rawAsks = data?.asks || data?.a;
+
+  if (
+    !Array.isArray(rawBids) ||
+    !Array.isArray(rawAsks) ||
+    rawBids.length === 0 ||
+    rawAsks.length === 0
+  ) {
+    throw Error("Invalid Binance order book format");
   }
 
-  const bids = data.bids.map(x => [
-    Number(x[0]), Number(x[1])
-  ]);
+  const bids = rawBids.map(x => [
+    Number(x[0]),
+    Number(x[1])
+  ]).filter(x =>
+    Number.isFinite(x[0]) &&
+    Number.isFinite(x[1]) &&
+    x[0] > 0 &&
+    x[1] >= 0
+  );
 
-  const asks = data.asks.map(x => [
-    Number(x[0]), Number(x[1])
-  ]);
+  const asks = rawAsks.map(x => [
+    Number(x[0]),
+    Number(x[1])
+  ]).filter(x =>
+    Number.isFinite(x[0]) &&
+    Number.isFinite(x[1]) &&
+    x[0] > 0 &&
+    x[1] >= 0
+  );
+
+  if (!bids.length || !asks.length) {
+    throw Error("Order book contains invalid price levels");
+  }
 
   const bidValue = total(
     bids.map(x => x[0] * x[1])
@@ -614,12 +540,17 @@ function setBook(data) {
 
   const bestBid = Math.max(...bids.map(x => x[0]));
   const bestAsk = Math.min(...asks.map(x => x[0]));
+
+  if (bestAsk <= bestBid) {
+    throw Error("Invalid order book spread");
+  }
+
   const mid = (bestBid + bestAsk) / 2;
 
   S.book = {
     bv: bidValue,
     av: askValue,
-    imb: bidValue + askValue
+    imb: (bidValue + askValue)
       ? (bidValue - askValue) / (bidValue + askValue)
       : 0,
     spread: mid
@@ -627,6 +558,90 @@ function setBook(data) {
       : 0,
     time: Date.now()
   };
+}
+
+// ======================================
+// LOAD MARKET DATA
+// ======================================
+
+async function loadMarket() {
+  const results = await Promise.allSettled([
+    get("/fapi/v1/ticker/24hr?symbol=" + SYMBOL),
+    get("/fapi/v1/depth?symbol=" + SYMBOL + "&limit=100"),
+    get("/fapi/v1/aggTrades?symbol=" + SYMBOL + "&limit=100")
+  ]);
+
+  let tickerOK = false;
+
+  // TICKER
+  if (results[0].status === "fulfilled") {
+    try {
+      const d = results[0].value;
+      const price = Number(d.lastPrice);
+      const change = Number(d.priceChangePercent);
+
+      if (Number.isFinite(price) && price > 0) {
+        S.price = price;
+        S.change = Number.isFinite(change) ? change : 0;
+        tickerOK = true;
+      } else {
+        throw Error("Invalid ticker values");
+      }
+    } catch (e) {
+      addError("Ticker: " + String(e));
+    }
+  } else {
+    addError("Ticker: " + String(results[0].reason));
+  }
+
+  // REST ORDER BOOK
+  if (results[1].status === "fulfilled") {
+    try {
+      setBook(results[1].value);
+    } catch (e) {
+      addError("REST order book: " + String(e));
+    }
+  } else {
+    addError("REST order book: " + String(results[1].reason));
+  }
+
+  // RECENT TRADES
+  if (results[2].status === "fulfilled") {
+    try {
+      const data = results[2].value;
+
+      if (!Array.isArray(data)) {
+        throw Error("Invalid trades response");
+      }
+
+      const now = Date.now();
+
+      S.trades = data.map(t => ({
+        time: Number(t.T),
+        value: Number(t.p) * Number(t.q),
+        buy: !t.m
+      })).filter(t =>
+        Number.isFinite(t.time) &&
+        Number.isFinite(t.value) &&
+        t.time > now - 60000
+      );
+
+    } catch (e) {
+      addError("Trades: " + String(e));
+    }
+  } else {
+    addError("Trades: " + String(results[2].reason));
+  }
+
+  // Accept a fresh REST or WebSocket order book.
+  const bookFresh =
+    S.book && Date.now() - S.book.time < 30000;
+
+  if (tickerOK && bookFresh) {
+    S.lastMarket = Date.now();
+  } else {
+    addError("Market snapshot incomplete");
+  }
 }
 
 // ======================================
@@ -640,6 +655,10 @@ async function loadOI() {
     );
 
     const next = Number(data.openInterest);
+
+    if (!Number.isFinite(next) || next <= 0) {
+      throw Error("Invalid open interest response");
+    }
 
     if (S.oi !== null && S.oi > 0) {
       S.oiChange = (next - S.oi) / S.oi * 100;
@@ -663,8 +682,15 @@ async function loadFunding() {
       "/fapi/v1/premiumIndex?symbol=" + SYMBOL
     );
 
-    S.funding = Number(data.lastFundingRate);
-    S.mark = Number(data.markPrice);
+    const funding = Number(data.lastFundingRate);
+    const mark = Number(data.markPrice);
+
+    if (!Number.isFinite(funding) || !Number.isFinite(mark) || mark <= 0) {
+      throw Error("Invalid funding response");
+    }
+
+    S.funding = funding;
+    S.mark = mark;
     S.lastFunding = Date.now();
 
   } catch (e) {
@@ -714,17 +740,27 @@ function connect() {
         const name = packet.stream || "";
 
         if (name.includes("aggTrade")) {
-          S.trades.push({
-            time: Number(data.T),
-            value: Number(data.p) * Number(data.q),
-            buy: !data.m
-          });
+          const price = Number(data.p);
+          const quantity = Number(data.q);
+          const time = Number(data.T);
 
-          S.trades = S.trades.filter(
-            x => x.time > Date.now() - 60000
-          );
+          if (
+            Number.isFinite(price) &&
+            Number.isFinite(quantity) &&
+            Number.isFinite(time)
+          ) {
+            S.trades.push({
+              time,
+              value: price * quantity,
+              buy: !data.m
+            });
 
-          S.price = Number(data.p);
+            S.trades = S.trades.filter(
+              x => x.time > Date.now() - 60000
+            );
+
+            S.price = price;
+          }
         }
 
         if (name.includes("depth20")) {
@@ -732,15 +768,20 @@ function connect() {
         }
 
         if (name === "!forceOrder@arr" && data.o) {
-          S.liqs.push({
-            side: data.o.S,
-            value: Number(data.o.ap) * Number(data.o.q),
-            time: Date.now()
-          });
+          const order = data.o;
+          const value = Number(order.ap) * Number(order.q);
 
-          S.liqs = S.liqs.filter(
-            x => x.time > Date.now() - 300000
-          );
+          if (Number.isFinite(value) && value >= 0) {
+            S.liqs.push({
+              side: order.S,
+              value,
+              time: Date.now()
+            });
+
+            S.liqs = S.liqs.filter(
+              x => x.time > Date.now() - 300000
+            );
+          }
         }
 
       } catch (e) {
@@ -1084,7 +1125,6 @@ function render() {
 
     signal(stats, buyRatio);
 
-    // FIXED: escaped newlines inside the outer HTML template.
     put(
       "health",
       "JavaScript: Running" +
