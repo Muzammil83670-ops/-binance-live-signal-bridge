@@ -1,4 +1,71 @@
+function setBook(data) {
+  // Binance REST uses bids/asks.
+  // Binance WebSocket uses b/a.
+  const rawBids = data?.bids || data?.b;
+  const rawAsks = data?.asks || data?.a;
 
+  if (
+    !Array.isArray(rawBids) ||
+    !Array.isArray(rawAsks) ||
+    rawBids.length === 0 ||
+    rawAsks.length === 0
+  ) {
+    throw Error("Invalid Binance order book format");
+  }
+
+  const bids = rawBids.map(x => [
+    Number(x[0]),
+    Number(x[1])
+  ]).filter(x =>
+    Number.isFinite(x[0]) &&
+    Number.isFinite(x[1]) &&
+    x[0] > 0 &&
+    x[1] >= 0
+  );
+
+  const asks = rawAsks.map(x => [
+    Number(x[0]),
+    Number(x[1])
+  ]).filter(x =>
+    Number.isFinite(x[0]) &&
+    Number.isFinite(x[1]) &&
+    x[0] > 0 &&
+    x[1] >= 0
+  );
+
+  if (!bids.length || !asks.length) {
+    throw Error("Order book contains invalid price levels");
+  }
+
+  const bidValue = total(
+    bids.map(x => x[0] * x[1])
+  );
+
+  const askValue = total(
+    asks.map(x => x[0] * x[1])
+  );
+
+  const bestBid = Math.max(...bids.map(x => x[0]));
+  const bestAsk = Math.min(...asks.map(x => x[0]));
+
+  if (bestAsk <= bestBid) {
+    throw Error("Invalid order book spread");
+  }
+
+  const mid = (bestBid + bestAsk) / 2;
+
+  S.book = {
+    bv: bidValue,
+    av: askValue,
+    imb: (bidValue + askValue)
+      ? (bidValue - askValue) / (bidValue + askValue)
+      : 0,
+    spread: mid
+      ? (bestAsk - bestBid) / mid * 100
+      : 0,
+    time: Date.now()
+  };
+}
 export default {
   async fetch(request) {
     const url = new URL(request.url);
